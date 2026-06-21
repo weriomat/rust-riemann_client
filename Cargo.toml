@@ -1,11 +1,14 @@
 [package]
-authors = ["Sam Clements <sam@borntyping.co.uk>"]
+authors = [
+  "Sam Clements <sam@borntyping.co.uk>",
+  "Elias Engel <engel@weriomat.com>",
+]
 description = "A Riemann client library"
 edition = "2018"
 license = "MIT"
 name = "riemann_client"
 repository = "https://github.com/borntyping/rust-riemann_client"
-version = "0.9.0"
+version = "0.10.0"
 
 [[bin]]
 name = "riemann-cli"
