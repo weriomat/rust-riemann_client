@@ -49,7 +49,19 @@ impl TCPTransport {
         }
 
         let mut root_store = RootCertStore::empty();
-        let (_added, _failed) = root_store.add_parsable_certificates(ca_certs);
+        let (added, invalid) = root_store.add_parsable_certificates(ca_certs);
+        if added == 0 {
+            return Err(Error::CACert(format!(
+                "No valid CA certificates found in '{}'",
+                ca_file
+            )));
+        }
+        if invalid > 0 {
+            return Err(Error::CACert(format!(
+                "{} certificate(s) in '{}' were ignored as malformed",
+                invalid, ca_file
+            )));
+        }
 
         let certs = load_certs(cert_file)?;
         let key = load_private_key(key_file)?;
@@ -57,7 +69,6 @@ impl TCPTransport {
         let config = ClientConfig::builder()
             .with_root_certificates(root_store)
             .with_client_auth_cert(certs, key)?;
-        // .map_err(|e| Error::Key(format!("Invalid client cert/key: {}", e)))?;
 
         let server_name = ServerName::try_from(hostname)?;
 
