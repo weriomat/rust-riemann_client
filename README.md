@@ -30,6 +30,21 @@ To build the library alone, without the command line interface and it's dependen
 
 The protocol buffer definition can be updated by replacing `src/proto/mod.proto` with the [latest definition from the Riemann source](https://raw.githubusercontent.com/riemann/riemann-java-client/refs/heads/main/riemann-java-client/src/main/proto/riemann/proto.proto) and running `make`. You will need to have `protoc` and `protoc-gen-rust` installed. `protoc` is provided by the `protobuf-compiler` package on Debian based systems. Instructions for installing `protoc-gen-rust` this are available in the [README for rust-protobuf](https://github.com/stepancheg/rust-protobuf).
 
+### mTLS
+
+To create the test certificates the following commands were used.
+
+```bash
+cd test_certs
+
+# create the CA
+openssl req -x509 -newkey rsa:2048 -keyout ca.key -out ca.pem -nodes -days 999999 -subj "/CN=TestCA"
+
+# create the client cert
+openssl req -newkey rsa:2048 -keyout client.key -out client.csr -nodes -subj "/CN=client"
+openssl x509 -req -in client.csr -CA ca.pem -CAkey ca.key -CAcreateserial -out client.pem -days 999999
+```
+
 ## Licence
 
 `riemann_client` is licenced under the [MIT Licence](http://opensource.org/licenses/MIT).

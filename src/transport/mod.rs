@@ -174,102 +174,90 @@ fn send_msg<T: Read + Write>(mut stream: T, msg: Msg) -> Result<Msg> {
 mod tests {
     use super::*;
 
+    use rustls;
+
     #[test]
     fn test_load_valid_cert() {
-        let mut config = rustls::ClientConfig::new();
-        assert_eq!(
-            config.root_store.add(
-                load_certs("test_certs/valid_cert.pem")
-                    .unwrap()
-                    .get(0)
-                    .unwrap(),
-            ),
-            Ok(()),
-        );
+        let mut root_store = RootCertStore::empty();
+        let cert = load_certs("test_certs/ca.pem")
+            .unwrap()
+            .into_iter()
+            .next()
+            .unwrap();
+        assert!(root_store.add(cert).is_ok());
     }
 
     #[test]
     #[should_panic(
-        expected = "called `Result::unwrap()` on an `Err` value: Io(Os { code: 2, kind: NotFound, message: \"No such file or directory\" }"
+        expected = "called `Result::unwrap()` on an `Err` value: Key(\"Fail to load client cert file (test_certs/missing_cert.pem): I/O error: No such file or directory (os error 2)\")"
     )]
     fn test_load_missing_cert() {
-        let mut config = rustls::ClientConfig::new();
-        assert_eq!(
-            config.root_store.add(
-                load_certs("test_certs/missing_cert.pem")
-                    .unwrap()
-                    .get(0)
-                    .unwrap(),
-            ),
-            Ok(()),
-        );
+        let mut root_store = RootCertStore::empty();
+        let cert = load_certs("test_certs/missing_cert.pem")
+            .unwrap()
+            .into_iter()
+            .next()
+            .unwrap();
+        assert!(root_store.add(cert).is_ok());
     }
 
     #[test]
     #[should_panic(expected = "called `Option::unwrap()` on a `None` value")]
     fn test_load_empty_cert() {
-        let mut config = rustls::ClientConfig::new();
-        assert_eq!(
-            config.root_store.add(
-                load_certs("test_certs/empty_cert.pem")
-                    .unwrap()
-                    .get(0)
-                    .unwrap(),
-            ),
-            Ok(()),
-        );
+        let mut root_store = RootCertStore::empty();
+        let cert = load_certs("test_certs/empty_cert.pem")
+            .unwrap()
+            .into_iter()
+            .next()
+            .unwrap();
+        assert!(root_store.add(cert).is_ok());
     }
 
     #[test]
     fn test_load_invalid_cert() {
-        let mut config = rustls::ClientConfig::new();
-        assert_eq!(
-            config.root_store.add(
-                load_certs("test_certs/invalid_cert.pem")
-                    .unwrap()
-                    .get(0)
-                    .unwrap(),
-            ),
-            Err(webpki::Error::BadDER),
-        );
+        let mut root_store = RootCertStore::empty();
+        let cert = load_certs("test_certs/invalid_cert.pem")
+            .unwrap()
+            .into_iter()
+            .next()
+            .unwrap();
+        assert!(root_store.add(cert).is_err());
     }
 
     #[test]
     fn test_load_valid_key() {
-        let mut config = rustls::ClientConfig::new();
-        assert_eq!(
-            config.set_single_client_cert(
-                load_certs("test_certs/valid_client_cert.pem").unwrap(),
-                load_private_key("test_certs/valid_client_key").unwrap(),
-            ),
-            Ok(())
-        );
+        let certs = load_certs("test_certs/client.pem").unwrap();
+        let key = load_private_key("test_certs/client.key").unwrap();
+
+        let result = ClientConfig::builder()
+            .with_root_certificates(RootCertStore::empty())
+            .with_client_auth_cert(certs, key);
+        assert!(result.is_ok());
     }
 
     #[test]
     #[should_panic(
-        expected = "called `Result::unwrap()` on an `Err` value: Key(\"Key not found\")"
+        expected = "called `Result::unwrap()` on an `Err` value: Key(\"Fail to load key file (test_certs/empty_client.key): no items found\")"
     )]
     fn test_load_empty_key() {
-        let mut config = rustls::ClientConfig::new();
-        assert_eq!(
-            config.set_single_client_cert(
-                load_certs("test_certs/valid_client_cert.pem").unwrap(),
-                load_private_key("test_certs/empty_client_key").unwrap(),
-            ),
-            Ok(())
-        );
+        let certs = load_certs("test_certs/client.pem").unwrap();
+        let key = load_private_key("test_certs/empty_client.key").unwrap();
+        let _ = ClientConfig::builder()
+            .with_root_certificates(RootCertStore::empty())
+            .with_client_auth_cert(certs, key)
+            .unwrap();
     }
 
     #[test]
+    #[should_panic(
+        expected = "called `Result::unwrap()` on an `Err` value: General(\"failed to parse private key as RSA, ECDSA, or EdDSA\")"
+    )]
     fn test_load_invalid_key() {
-        let mut config = rustls::ClientConfig::new();
-        assert_eq!(
-            config.set_single_client_cert(
-                load_certs("test_certs/valid_client_cert.pem").unwrap(),
-                load_private_key("test_certs/invalid_client_key").unwrap(),
-            ),
-            Err(rustls::TLSError::General("invalid private key".to_string()))
-        );
+        let certs = load_certs("test_certs/client.pem").unwrap();
+        let key = load_private_key("test_certs/invalid_client.key").unwrap();
+        let _ = ClientConfig::builder()
+            .with_root_certificates(rustls::RootCertStore::empty())
+            .with_client_auth_cert(certs, key)
+            .unwrap();
     }
 }
