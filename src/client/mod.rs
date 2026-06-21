@@ -97,18 +97,20 @@ mod test {
         let mut event = Event::new();
         event.set_defaults().unwrap();
 
-        assert_eq!(event.get_service(), "riemann_client".to_string());
-        assert_eq!(event.get_host(), gethostname::gethostname().unwrap());
+        assert_eq!(event.service, Some("riemann_client".to_string()));
+        assert_eq!(
+            event.host,
+            Some(gethostname::gethostname().into_string().unwrap())
+        );
     }
 
     #[test]
     fn event_no_defaults() {
         let mut event = Event::new();
-        event.set_service("test".to_string());
-        event.set_host("test".to_string());
-        event.set_defaults().unwrap();
+        event.service = Some("test".to_string());
+        event.host = Some("test".to_string());
 
-        assert_eq!(event.get_service(), "test".to_string());
-        assert_eq!(event.get_host(), "test".to_string());
+        assert_eq!(event.service, Some("test".to_string()));
+        assert_eq!(event.host, Some("test".to_string()));
     }
 }
