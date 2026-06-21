@@ -3,7 +3,7 @@
 use std::net::{TcpStream, ToSocketAddrs};
 use std::time::Duration;
 
-use ::protobuf::{CodedInputStream, Message};
+use ::protobuf::{CodedInputStream, Message, MessageField};
 
 use super::proto::{Event, Msg, Query};
 use super::utils::{Error, Result};
@@ -100,7 +100,7 @@ impl TCPTransport {
     pub fn send_events(&mut self, events: Vec<Event>) -> Result<Msg> {
         self.send_msg_encryption_wrapper({
             let mut msg = Msg::new();
-            msg.set_events(::protobuf::RepeatedField::from_vec(events));
+            msg.events = events;
             msg
         })
     }
@@ -108,7 +108,7 @@ impl TCPTransport {
     pub fn send_query(&mut self, query: Query) -> Result<Msg> {
         self.send_msg_encryption_wrapper({
             let mut msg = Msg::new();
-            msg.set_query(query);
+            msg.query = MessageField::some(query);
             msg
         })
     }
@@ -152,7 +152,7 @@ fn send_msg<T: Read + Write>(mut stream: T, msg: Msg) -> Result<Msg> {
     let bytes = msg.write_to_bytes()?;
 
     assert!(
-        size == bytes.len() as u32,
+        size == (bytes.len() as u32).into(),
         "Message computed size ({}) and encoded length ({}) do not \
              match, you are going to have a bad day.",
         size,
@@ -184,10 +184,10 @@ fn send_msg<T: Read + Write>(mut stream: T, msg: Msg) -> Result<Msg> {
     let msg: Msg = protobuf::Message::parse_from_bytes(&bytes)?;
 
     // If the message has set `ok: false`, transform it into an `Err`
-    if msg.get_ok() {
+    if !msg.has_error() {
         Ok(msg)
     } else {
-        Err(Error::Riemann(msg.get_error().to_string()))
+        Err(Error::Riemann(msg.error().to_string()))
     }
 }
 

@@ -14,11 +14,14 @@ test = false
 
 [dependencies]
 libc = "0.2.84"
-protobuf = "2.20.0"
+protobuf = "3.7.2"
 rustls = "0.19.0"
 rustls-pemfile = "0.2.0"
 webpki = "0.21.4"
 webpki-roots = "0.21.0"
+
+[build-dependencies]
+protobuf-codegen = "3.7.2"
 
 [dependencies.docopt]
 optional = true

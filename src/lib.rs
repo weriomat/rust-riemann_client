@@ -13,7 +13,7 @@ mod utils {
     use std::fmt::{Display, Formatter};
     use std::io::Error as IoError;
 
-    use ::protobuf::error::ProtobufError;
+    use ::protobuf::Error as ProtobufError;
 
     use super::proto::Query;
 

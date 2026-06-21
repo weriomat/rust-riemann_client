@@ -82,8 +82,8 @@ impl Client {
         let response = self.transport.send_query(query.into())?;
 
         Ok({
-            let mut events = Vec::from(response.get_events());
-            events.sort_by(|a, b| a.get_service().cmp(b.get_service()));
+            let mut events = Vec::from(response.events);
+            events.sort_by(|a, b| a.service.cmp(&b.service));
             events
         })
     }
