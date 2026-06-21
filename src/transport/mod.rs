@@ -1,23 +1,25 @@
 //! Layer two: Protobuf transport over TCP.
 
-use std::net::{TcpStream, ToSocketAddrs};
-use std::time::Duration;
+use std::{
+    convert::TryFrom,
+    io::{Read, Write},
+    net::{TcpStream, ToSocketAddrs},
+    sync::Arc,
+    time::Duration,
+};
 
-use ::protobuf::{CodedInputStream, Message, MessageField};
+use protobuf::{CodedInputStream, Message, MessageField};
+
+use rustls::pki_types::pem::PemObject;
+use rustls::pki_types::{CertificateDer, PrivateKeyDer, ServerName};
+use rustls::{ClientConfig, ClientConnection, RootCertStore};
 
 use super::proto::{Event, Msg, Query};
 use super::utils::{Error, Result};
 
-use std::sync::Arc;
-
-use std::fs::File;
-use std::io::BufReader;
-use std::io::Read;
-use std::io::Write;
-
 pub struct TCPTransport {
     stream: TcpStream,
-    tls_sess: Option<rustls::ClientSession>,
+    tls_sess: Option<rustls::ClientConnection>,
 }
 
 impl TCPTransport {
@@ -29,51 +31,37 @@ impl TCPTransport {
     }
 
     pub fn connect_tls(
-        hostname: &str,
+        hostname: String,
         port: u16,
         ca_file: &str,
         cert_file: &str,
         key_file: &str,
     ) -> Result<Self> {
-        let addr = (hostname, port);
-        let mut config = rustls::ClientConfig::new();
-        config
-            .root_store
-            .add(
-                load_certs(ca_file)
-                    .or_else(|e| match e {
-                        Error::Io(e) => Err(Error::CACert(format!(
-                            "Fail to load CACert file ({}): {}",
-                            ca_file, e
-                        ))),
-                        _ => unreachable!("CAcert issue"),
-                    })?
-                    .get(0)
-                    .ok_or_else(|| {
-                        Error::CACert(format!("Certificate file ({}) probably empty", ca_file))
-                    })?,
-            )
-            .map_err(|e| Error::CACert(format!("Certificate format error: {}", e)))?;
+        let addr = (hostname.clone(), port);
 
-        config.set_single_client_cert(
-            load_certs(cert_file).or_else(|e| match e {
-                Error::Io(e) => Err(Error::Key(format!(
-                    "Fail to load client cert file ({}): {}",
-                    cert_file, e
-                ))),
-                _ => unreachable!("Client cert issue"),
-            })?,
-            load_private_key(key_file).or_else(|e| match e {
-                Error::Io(e) => Err(Error::Key(format!(
-                    "Fail to load key file ({}): {}",
-                    key_file, e
-                ))),
-                _ => unreachable!("Key issue"),
-            })?,
-        )?;
+        let ca_certs = load_certs(ca_file)?;
 
-        let dns_name = webpki::DNSNameRef::try_from_ascii_str(hostname)?;
-        let sess = rustls::ClientSession::new(&Arc::new(config), dns_name);
+        if ca_certs.is_empty() {
+            return Err(Error::CACert(format!(
+                "Certificate file ({}) probably empty",
+                ca_file
+            )));
+        }
+
+        let mut root_store = RootCertStore::empty();
+        let (_added, _failed) = root_store.add_parsable_certificates(ca_certs);
+
+        let certs = load_certs(cert_file)?;
+        let key = load_private_key(key_file)?;
+
+        let config = ClientConfig::builder()
+            .with_root_certificates(root_store)
+            .with_client_auth_cert(certs, key)?;
+        // .map_err(|e| Error::Key(format!("Invalid client cert/key: {}", e)))?;
+
+        let server_name = ServerName::try_from(hostname)?;
+
+        let sess = ClientConnection::new(Arc::new(config), server_name)?;
         let stream = TcpStream::connect(addr)?;
         Ok(TCPTransport {
             stream,
@@ -120,30 +108,21 @@ impl ::std::fmt::Debug for TCPTransport {
     }
 }
 
-fn load_certs(filename: &str) -> Result<Vec<rustls::Certificate>> {
-    let certfile = File::open(filename)?;
-    let mut reader = BufReader::new(certfile);
-    Ok(rustls_pemfile::certs(&mut reader)?
-        .iter()
-        .map(|v| rustls::Certificate(v.clone()))
-        .collect())
+fn load_certs(filename: &str) -> Result<Vec<CertificateDer<'static>>> {
+    CertificateDer::pem_file_iter(filename)
+        .map_err(|e| {
+            Error::Key(format!(
+                "Fail to load client cert file ({}): {}",
+                filename, e
+            ))
+        })?
+        .map(|cert| cert.map_err(Error::PemParse))
+        .collect::<Result<Vec<_>>>()
 }
 
-fn load_private_key(filename: &str) -> Result<rustls::PrivateKey> {
-    let keyfile = File::open(filename)?;
-    let mut reader = BufReader::new(keyfile);
-
-    loop {
-        match rustls_pemfile::read_one(&mut reader)? {
-            Some(rustls_pemfile::Item::RSAKey(key)) => return Ok(rustls::PrivateKey(key)),
-
-            Some(rustls_pemfile::Item::PKCS8Key(key)) => return Ok(rustls::PrivateKey(key)),
-            None => break,
-            _ => {}
-        }
-    }
-
-    Err(Error::Key("Key not found".to_string()))
+fn load_private_key(filename: &str) -> Result<PrivateKeyDer<'static>> {
+    PrivateKeyDer::from_pem_file(filename)
+        .map_err(|e| Error::Key(format!("Fail to load key file ({}): {}", filename, e)))
 }
 
 fn send_msg<T: Read + Write>(mut stream: T, msg: Msg) -> Result<Msg> {

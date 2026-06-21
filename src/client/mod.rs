@@ -47,7 +47,13 @@ impl Client {
         key_file: &str,
     ) -> Result<Self> {
         Ok(Client {
-            transport: TCPTransport::connect_tls(hostname, port, ca_file, cert_file, key_file)?,
+            transport: TCPTransport::connect_tls(
+                hostname.to_owned(),
+                port,
+                ca_file,
+                cert_file,
+                key_file,
+            )?,
         })
     }
 
