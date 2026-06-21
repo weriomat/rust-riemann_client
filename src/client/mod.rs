@@ -7,8 +7,6 @@ use super::proto::{Event, Msg, Query};
 use super::transport::TCPTransport;
 use super::Result;
 
-mod hostname;
-
 /// Adds a `set_defaults()` method to `Event`
 trait SetDefaults {
     fn set_defaults(&mut self) -> Result<()>;
@@ -18,7 +16,7 @@ impl SetDefaults for Event {
     /// Sets a host and service for the event if they are not set
     fn set_defaults(&mut self) -> Result<()> {
         if !self.has_host() {
-            self.set_host(hostname::hostname()?)
+            self.set_host(gethostname::gethostname().into_string()?);
         }
         if !self.has_service() {
             self.set_service("riemann_client".to_string())
@@ -82,7 +80,7 @@ impl Client {
         let response = self.transport.send_query(query.into())?;
 
         Ok({
-            let mut events = Vec::from(response.events);
+            let mut events = response.events;
             events.sort_by(|a, b| a.service.cmp(&b.service));
             events
         })
@@ -92,7 +90,6 @@ impl Client {
 #[cfg(test)]
 mod test {
     use super::super::proto::Event;
-    use super::hostname::hostname;
     use super::SetDefaults;
 
     #[test]
@@ -101,7 +98,7 @@ mod test {
         event.set_defaults().unwrap();
 
         assert_eq!(event.get_service(), "riemann_client".to_string());
-        assert_eq!(event.get_host(), hostname().unwrap());
+        assert_eq!(event.get_host(), gethostname::gethostname().unwrap());
     }
 
     #[test]

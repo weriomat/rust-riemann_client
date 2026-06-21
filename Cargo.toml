@@ -13,7 +13,7 @@ path = "src/main.rs"
 test = false
 
 [dependencies]
-libc = "0.2.84"
+gethostname = "1.1.0"
 protobuf = "3.7.2"
 rustls = "0.19.0"
 rustls-pemfile = "0.2.0"
