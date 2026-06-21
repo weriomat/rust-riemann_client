@@ -35,14 +35,110 @@ The protocol buffer definition can be updated by replacing `src/proto/mod.proto`
 To create the test certificates the following commands were used.
 
 ```bash
-cd test_certs
+$ cd test_certs
 
 # create the CA
-openssl req -x509 -newkey rsa:2048 -keyout ca.key -out ca.pem -nodes -days 999999 -subj "/CN=TestCA"
+$ openssl genrsa -out ca.key 4096
+$ openssl req -new -x509 -days 3650 -key ca.key \
+  -out ca.crt \
+  -subj "/CN=Riemann-Test-CA/O=Example/C=US"
+
+# generate a certificate for the server
+$ openssl genrsa -out riemann_server.key 4096
+
+# needed as we run riemann under localhost; rustls would otherwise throw an error,
+# that no DNS name from the certificate matches localhost
+# adapted from https://gist.github.com/justinhartman/36cccc6ce26a01378369b35fd048748a#file-02_openssl-cnf
+$ cat > riemann_server.cnf <<EOF
+[req]
+distinguished_name = req_distinguished_name
+req_extensions = v3_req
+prompt = no
+
+[req_distinguished_name]
+CN = riemann.example.com
+O = Example
+C = US
+
+[v3_req]
+subjectAltName = @alt_names
+
+[alt_names]
+DNS.1 = localhost
+DNS.2 = riemann.example.com
+IP.1  = 127.0.0.1
+EOF
+
+$ openssl req -new -key riemann_server.key \
+  -out riemann_server.csr \
+  -config riemann_server.cnf
+
+$ openssl x509 -req -in riemann_server.csr \
+  -CA ca.crt -CAkey ca.key -CAcreateserial \
+  -out riemann_server.crt -days 365 \
+  -sha256 \
+  -extensions v3_req -extfile riemann_server.cnf
 
 # create the client cert
-openssl req -newkey rsa:2048 -keyout client.key -out client.csr -nodes -subj "/CN=client"
-openssl x509 -req -in client.csr -CA ca.pem -CAkey ca.key -CAcreateserial -out client.pem -days 999999
+$ openssl genrsa -out client.key 4096
+$ openssl req -new -key client.key \
+  -out client.csr \
+  -subj "/CN=riemann-client/O=Example/C=US"
+$ openssl x509 -req -in client.csr \
+  -CA ca.crt -CAkey ca.key -CAcreateserial \
+  -out client.crt -days 365 \
+  -sha256
+```
+
+The following is an example configuration for the server using TLS
+
+```riemann.config
+(logging/init {:file "riemann.log"})
+(tcp-server {:host "0.0.0.0"
+             :port 5554
+             :tls? true
+             :key "riemann_server.key"
+             :cert "riemann_server.crt"
+             :ca-cert "ca.crt"})
+
+(instrumentation {:interval 1})
+
+(periodically-expire 1)
+
+(let [index (tap :index (index))]
+  (streams
+    (default :ttl 3
+      (expired #(prn "Expired" %))
+      (where (not (service #"^riemann "))
+             index))))
+```
+
+To the TLS you should start the server in one terminal.
+
+```bash
+$ cd test_certs
+$ riemann ./riemann.config
+```
+
+In another terminal you can use the provided examples to the functionality.
+Note that the paths to `./test_certs/*` are hardcoded, thus the examples have to be run from the "root" directory.
+
+```bash
+$ cargo run --example query_tls
+  Compiling riemann_client v0.9.0 (/home/marts/P/rust/rieman-main)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.32s
+     Running `/home/marts/.local/state/cargo/debug/examples/event_tls`
+# as there is no event stored we generate one
+$ cargo run --example event_tls
+  Compiling riemann_client v0.9.0 (/home/marts/P/rust/rieman-main)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.32s
+     Running `/home/marts/.local/state/cargo/debug/examples/event_tls`
+
+$ cargo run --example query_tls
+  Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.05s
+   Running `/home/marts/.local/state/cargo/debug/examples/query_tls`
+HOSTNAME   TIME       SERVICE                                                 METRIC     STATE     
+nixos      1782054519 rust-riemann_client                                     128.128    ok
 ```
 
 ## Licence

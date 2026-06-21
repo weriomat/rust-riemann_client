@@ -2,8 +2,14 @@ use riemann_client::proto::Event;
 use riemann_client::Client;
 
 fn main() {
-    let mut client =
-        Client::connect_tls("myhost_name", 5554, "myCA.pem", "mycert.pem", "mykey").unwrap();
+    let mut client = Client::connect_tls(
+        "localhost",
+        5554,
+        "./test_certs/ca.crt",
+        "./test_certs/client.crt",
+        "./test_certs/client.key",
+    )
+    .unwrap();
 
     client
         .event({

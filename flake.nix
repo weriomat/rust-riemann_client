@@ -62,6 +62,7 @@
 
             # the actual server package
             pkgs.riemann
+            pkgs.openssl
           ];
         };
       }
