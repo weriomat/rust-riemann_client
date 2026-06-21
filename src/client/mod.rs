@@ -3,7 +3,7 @@
 use std::net::ToSocketAddrs;
 use std::time::Duration;
 
-use super::proto::{Event, Query};
+use super::proto::{Event, Msg, Query};
 use super::transport::TCPTransport;
 use super::Result;
 
@@ -59,21 +59,21 @@ impl Client {
     }
 
     /// Send multiple events, discarding the response if it is not an error.
-    pub fn events(&mut self, mut events: Vec<Event>) -> Result<()> {
+    pub fn events(&mut self, mut events: Vec<Event>) -> Result<Msg> {
         // Modify each event in the vector in place
         for event in events.iter_mut() {
             event.set_defaults()?;
         }
 
         // Send all events in the same message
-        self.transport.send_events(events)?;
+        let msg = self.transport.send_events(events)?;
 
         // A successful response is discarded as it contains no useful information
-        Ok(())
+        Ok(msg)
     }
 
     /// Wrapper around `.events()` for sending a single `Event`.
-    pub fn event(&mut self, event: Event) -> Result<()> {
+    pub fn event(&mut self, event: Event) -> Result<Msg> {
         self.events(vec![event])
     }
 
